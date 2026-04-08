@@ -1,61 +1,75 @@
-# ADR 006: Gestión Integral del Ciclo de Vida de Órdenes, Pagos y Resiliencia Sistémica
+# ADR 006: Arquitectura del Flujo de Pagos, Resiliencia y Experiencia de Usuario Asíncrona
 
-**Fecha:** 6 de Abril de 2026  
-**Estado:** Aprobado  
-**Contexto:** El dominio de Órdenes y Pagos es el núcleo crítico de "Bazaar". Requiere una arquitectura que garantice la consistencia de datos, la inmutabilidad financiera, la gestión eficiente del stock y la recuperación automática ante fallos de red o de infraestructura interna.
+## Estado
 
-## 1. El Problema: Consistencia y Resiliencia en Sistemas Distribuidos
+Aprobado
 
-Un flujo de compras mal diseñado puede derivar en:
+## Contexto
 
-1. **Pérdida de Integridad Histórica:** Cambios en el catálogo que alteran facturas pasadas.
-2. **Stock Secuestrado:** Usuarios que inician un pago pero no lo completan, bloqueando el producto para otros compradores.
-3. **Mensajes Fantasmas:** Pagos confirmados que no impactan en el sistema porque el Broker de Mensajería (RabbitMQ) estaba caído.
-4. **Doble Reembolso:** Errores de red que provocan que se devuelva el dinero dos veces ante una cancelación.
+Checkout y Ordenes concentran requisitos criticos de consistencia: evitar doble cobro, evitar sobreventa, mantener historial de compras/ventas inmutable y soportar asincronia de pago sin degradar experiencia de usuario.
 
-## 2. Decisión: Inmutabilidad mediante Snapshots
+En este dominio conviven:
 
-Para blindar el historial de "Mis Compras" y "Mis Ventas":
+- Operaciones sincronas de inicio de checkout.
+- Confirmaciones asincronas de pago desde gateway.
+- Actualizaciones de estado de orden por vendedor/comprador.
+- Casos de error y reintento (timeouts, callbacks duplicados, fallas de broker).
 
-- El `Order Service` no solo guardará el `product_id`. Al momento de crear la orden, realizará un **Snapshot** (captura) de los datos del producto (Nombre, Precio de venta, Imagen).
-- Estos datos se guardan de forma redundante en la base de datos PostgreSQL de Órdenes.
-- **Resultado:** Si un vendedor cambia el precio o borra el producto al día siguiente, la orden del comprador permanece intacta y veraz.
+Ademas, la maquina de estados debe alinearse al modelo canónico definido para el checkpoint (`pendiente_de_pago`, `confirmada`, `en_preparacion`, `enviada`, `entregada` y estados de excepcion).
 
-## 3. Decisión: Gestión de Reservas Huérfanas (TTL de Stock)
+## Decisión
 
-Para evitar que el stock quede bloqueado por pagos abandonados:
+Se adoptan las siguientes decisiones de arquitectura para Checkout/Order/Payment:
 
-- Toda orden en estado `PENDING_PAYMENT` tendrá un **TTL (Time-To-Live) de 15 minutos**.
-- El **CronJob** de reconciliación cancelará automáticamente cualquier orden que supere este tiempo sin una confirmación de pago del Gateway.
-- Al cancelar, se emitirá un evento para **liberar el stock** en el `Inventory Service`, permitiendo que otros usuarios compren el producto.
+1. Snapshot de datos de producto al crear la orden (nombre, precio de venta, imagen) para preservar inmutabilidad historica.
+2. Flujo asincrono de confirmacion de pago con orden inicial en `pendiente_de_pago`.
+3. Idempotencia obligatoria en operaciones sensibles de pago/reembolso para evitar ejecuciones duplicadas.
+4. Expiracion de ordenes en `pendiente_de_pago` por timeout operativo, con transicion controlada a estado de excepcion y compensacion de stock cuando aplique.
+5. Historial de transiciones de estado con timestamp para auditabilidad.
+6. UX asincrona con polling de estado de orden; notificaciones push quedan como extension no bloqueante del checkpoint.
 
-## 4. Decisión: Resiliencia ante Fallos Internos (Transactional Outbox)
+La implementacion concreta de patrones de resiliencia (por ejemplo, outbox relay) se considera recomendada y se aplicara segun complejidad/etapa de entrega, sin alterar contratos funcionales del checkpoint.
 
-Para garantizar que nunca se pierda una notificación de pago exitoso aunque RabbitMQ falle:
+## Alternativas consideradas
 
-- Se implementará el patrón **Transactional Outbox** en el `Payment Service`.
-- En una misma transacción de base de datos, se guardará el estado del pago y el mensaje del evento en una tabla de "Salida" (`outbox_events`).
-- Un proceso independiente (Relay/Worker) leerá esta tabla y reintentará el envío a RabbitMQ hasta que se confirme la recepción. Esto garantiza **entrega al menos una vez (At-least-once delivery)**.
+1. Orden referenciando solo `product_id` sin snapshot historico.
+2. Snapshot de producto en orden para congelar evidencia transaccional.
+3. Confirmacion de pago totalmente sincrona en request de checkout.
+4. Confirmacion asincrona con estados intermedios e idempotencia.
+5. Publicacion directa a broker sin outbox.
+6. Publicacion confiable con outbox/relay.
 
-## 5. Decisión: Idempotencia en Cancelaciones y Reembolsos
+## Consecuencias
 
-- Toda solicitud de reembolso (Refund) enviada desde el `Order Service` al `Payment Service` (y de allí al Gateway) incluirá el `order_id` como **Clave de Idempotencia**.
-- Si el sistema intenta reembolsar dos veces por un error de reintento, el Gateway detectará la clave duplicada y rechazará la segunda operación, evitando pérdidas financieras.
+- Positivas:
+	- Se protege integridad historica de compras/ventas aunque cambie catalogo.
+	- Se reduce riesgo de doble cobro con llaves de idempotencia.
+	- Se soporta asincronia real de pasarela de pago sin romper flujo de negocio.
+	- Se mejora auditabilidad con historial explicito de estados.
+- Negativas o tradeoffs:
+	- Mayor complejidad operativa por estados intermedios y compensaciones.
+	- Requiere coordinacion entre Order, Payment y Product/Inventory.
+	- Incremento de almacenamiento por snapshots y log de transiciones.
+- Riesgos y mitigaciones:
+	- Riesgo: callbacks duplicados o tardios del proveedor de pagos.
+		- Mitigacion: idempotencia por `order_id`/clave de negocio y validacion de transiciones.
+	- Riesgo: reservas de stock no liberadas por timeout.
+		- Mitigacion: job de reconciliacion con barrido periodico de `pendiente_de_pago` expiradas.
+	- Riesgo: perdida de eventos ante caida de broker.
+		- Mitigacion: patron outbox/relay en etapas de endurecimiento de resiliencia.
 
-## 6. Flujo de Experiencia de Usuario (UX)
+## Impacto en artefactos
 
-- **Polling en Frontend:** El cliente (React/Mobile) consultará el estado de la orden cada 2-3 segundos tras el pago para dar feedback inmediato al usuario.
-- **Notificaciones Push (Firebase FCM):** En caso de que el usuario cierre la aplicación, el `Notification Service` enviará una alerta push al detectar el cambio de estado a `PAID` o `CANCELLED` en la cola de mensajes.
-
-## 7. Máquina de Estados de la Orden
-
-1. `PENDING_PAYMENT`: Stock reservado temporalmente.
-2. `PAID`: Pago confirmado y stock deducido definitivamente.
-3. `SHIPPED`: Vendedor despachó el producto.
-4. `DELIVERED`: Paquete recibido (habilita **Reseñas**).
-5. `CANCELLED`: Pago fallido, expiración de tiempo (TTL) o cancelación manual. Gatilla reembolso si correspondiera.
-
-## 8. Consecuencias
-
-- **Positivas:** El sistema es financieramente auditable, resistente a particiones de red y garantiza una alta disponibilidad del stock real.
-- **Negativas:** Mayor complejidad en el desarrollo (implementación de Outbox y Workers) y ligero incremento en el uso de almacenamiento por los Snapshots de productos.
+- OpenAPI afectado:
+	- `POST /checkout`
+	- `GET /orders`
+	- `GET /orders/{id}`
+	- `PATCH /seller/orders/{id}/status`
+	- `PATCH /orders/{id}/confirm-delivery`
+- Diagramas afectados:
+	- Secuencia de checkout con confirmacion asincrona de pago.
+	- Maquina de estados de orden y validacion de transiciones.
+- Servicios y datos impactados:
+	- Order Service (aggregate de orden, snapshots, historial de estado).
+	- Payment Service (idempotencia, callbacks, resiliencia de publicacion).
+	- Product/Inventory Service (descuento/liberacion de stock por transiciones de orden).

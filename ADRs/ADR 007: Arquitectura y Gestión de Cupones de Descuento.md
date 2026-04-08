@@ -1,41 +1,74 @@
 # ADR 007: Arquitectura y Gestión de Cupones de Descuento
 
-**Fecha:** 7 de Abril de 2026  
-**Estado:** Propuesto / Aprobado  
-**Contexto:** Épicas 5 y 6 (Creación, gestión y aplicación de cupones de descuento en el Checkout).
+## Estado
 
-## 1. El Problema y Contexto de Negocio
+Aprobado
 
-El enunciado exige que los vendedores puedan crear cupones de descuento personalizados y que los compradores puedan aplicarlos durante el Checkout para reducir el monto total a pagar.
-Estas operaciones involucran lógicas complejas y volátiles: validación de códigos únicos, verificación de fechas de caducidad, control de límite de usos y cálculo matemático de descuentos (porcentajes o montos fijos).
+## Contexto
 
-Si delegamos esta responsabilidad al `Order Service`, este servicio perdería su foco (que es orquestar transacciones y pagos) y se acoplaría fuertemente a reglas de marketing, dificultando su mantenimiento y aumentando el riesgo de fallos durante el pago.
+El enunciado define dos capacidades relacionadas:
 
-## 2. Decisión Arquitectónica: Microservicio Dedicado
+- Vendedor: crear y gestionar cupones propios.
+- Comprador: aplicar cupon en checkout con reglas de validacion de negocio.
 
-Se decide crear un nuevo microservicio llamado **Discount Service** (o Coupon Service) encargado exclusivamente de la gestión del ciclo de vida de los cupones.
+Reglas funcionales obligatorias relevantes:
 
-### 2.1. Responsabilidades del Discount Service
+- Codigo unico global en plataforma.
+- Un solo cupon por orden.
+- Cupon invalido/vencido no interrumpe el flujo de checkout.
+- El descuento aplicado no puede superar el total de la orden.
 
-- **Gestión (Escritura):** Permitir a los vendedores crear (`POST`), listar (`GET`) y desactivar (`PATCH`) sus propios cupones.
-- **Validación:** Garantizar la unicidad del código del cupón a nivel de base de datos para evitar colisiones.
-- **Cálculo (Lectura/Cálculo):** Exponer un endpoint interno (`POST /internal/coupons/validate`) que reciba un código de cupón y el monto del carrito, y devuelva el descuento a aplicar (o un error si está vencido/agotado).
+La logica de cupones es de dominio promocional y evoluciona con mayor frecuencia que el flujo transaccional de orden/pago.
 
-### 2.2. Base de Datos
+## Decisión
 
-- Se utilizará **PostgreSQL**.
-- **Justificación:** Los cupones representan dinero y tienen reglas de límite de uso (ej. "Válido solo para los primeros 100 compradores"). Esto requiere garantías transaccionales (ACID) estrictas para evitar que, en un pico de concurrencia, 150 personas usen un cupón que estaba limitado a 100.
+Se separa la gestion de cupones en un servicio dedicado (`Discount` o `Coupon`) con base PostgreSQL y responsabilidades acotadas:
 
-## 3. Flujo de Aplicación en el Checkout
+1. Gestion de cupones de vendedor: crear, listar y desactivar cupones propios.
+2. Validacion de codigo unico global mediante restriccion a nivel de datos.
+3. Evaluacion de validez de cupon (activo, vigente, reglas de uso) y calculo de descuento.
+4. Integracion con checkout en dos momentos:
+	 - Previsualizacion: validacion para mostrar total estimado en UI.
+	 - Confirmacion de checkout: recalculo server-side antes de iniciar pago.
+5. Aplicacion de regla "un cupon por orden" y cap de descuento para no superar subtotal/total aplicable.
+6. Deduccion/consumo de uso de cupon en confirmacion de orden pagada, con idempotencia para evitar decrementos dobles.
 
-Para garantizar que el cupón no sea alterado maliciosamente por el cliente y para proteger el `Order Service`, el flujo será el siguiente:
+`Order Service` conserva el rol de orquestar checkout/pago sin absorber reglas promocionales.
 
-1. **Simulación en el Carrito:** Cuando el comprador ingresa el código en la pantalla de Checkout, el Frontend consulta al `Discount Service` (a través del Gateway) para mostrar el descuento en la UI.
-2. **Checkout Real (Consistencia):** Al presionar "Pagar", el Frontend envía el payload de la orden al `Order Service` incluyendo el string `coupon_code`.
-3. **Validación Síncrona:** Antes de pedirle el dinero al Gateway de Pagos, el `Order Service` realiza una llamada síncrona interna (HTTP/gRPC) al `Discount Service` consultando: _"¿Es válido este código y cuánto debo descontar del total?"_.
-4. **Deducción de Uso:** Una vez que el pago se aprueba (`PAID`), el `Order Service` emitirá un evento asíncrono (`OrderPaidEvent`) por RabbitMQ. El `Discount Service` escuchará este evento y restará "1" al límite de usos del cupón utilizado.
+## Alternativas consideradas
 
-## 4. Consecuencias y Compromisos (Trade-offs)
+1. Modelar cupones dentro de `Order Service`.
+2. Servicio dedicado de cupones con validacion sincronica desde checkout.
+3. Consumo de uso en el momento de aplicar cupon en UI.
+4. Consumo de uso al confirmar pago/orden.
 
-- **Positivas:** El `Order Service` se mantiene simple y enfocado. Si el `Discount Service` colapsa, el sistema puede estar configurado para simplemente no aceptar cupones temporalmente, pero el e-commerce puede seguir vendiendo (alta disponibilidad).
-- **Negativas:** Se introduce un nuevo componente a la topología de red y se suma un "salto" de red (Network Hop) síncrono durante el flujo crítico del Checkout.
+## Consecuencias
+
+- Positivas:
+	- Se desacopla el dominio promocional del dominio transaccional de orden/pago.
+	- Se protege la consistencia de reglas de cupon con validacion centralizada.
+	- Se facilita evolucion de campañas sin tocar el core de checkout.
+- Negativas o tradeoffs:
+	- Se agrega una dependencia sincronica extra en el camino critico del checkout.
+	- Incrementa la complejidad de integracion e idempotencia entre servicios.
+- Riesgos y mitigaciones:
+	- Riesgo: desalineacion entre descuento previsualizado y descuento final al pagar.
+		- Mitigacion: recalculo obligatorio en backend durante confirmacion de checkout.
+	- Riesgo: sobreconsumo por reintentos/callbacks duplicados.
+		- Mitigacion: operacion de consumo idempotente por `order_id`.
+	- Riesgo: indisponibilidad temporal de servicio de cupones.
+		- Mitigacion: degradar funcionalidad de cupones manteniendo checkout sin descuento cuando la politica de negocio lo permita.
+
+## Impacto en artefactos
+
+- OpenAPI afectado:
+	- Endpoints de vendedor para cupones (crear/listar/desactivar).
+	- Endpoint de validacion interna de cupon para checkout.
+	- `POST /checkout` (campo `coupon_code` y total final calculado server-side).
+- Diagramas afectados:
+	- Secuencia de aplicacion de cupon en checkout (previsualizacion + confirmacion).
+	- Secuencia de consumo de cupon tras pago confirmado.
+- Servicios y datos impactados:
+	- Discount/Coupon Service (reglas, persistencia, consumo).
+	- Order Service (invocacion de validacion y aplicacion final de descuento).
+	- Payment/Checkout flow (monto final consistente previo a cobro).

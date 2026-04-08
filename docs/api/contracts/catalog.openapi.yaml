@@ -11,12 +11,12 @@ paths:
       summary: Obtener contenido de home
       tags: [Catalog]
       responses:
-        '200':
+        "200":
           description: Home construida con secciones disponibles
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/HomeResponse'
+                $ref: "#/components/schemas/HomeResponse"
   /catalog/products:
     get:
       summary: Listar productos activos con paginacion
@@ -38,12 +38,12 @@ paths:
           schema:
             type: string
       responses:
-        '200':
+        "200":
           description: Listado de productos
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProductListResponse'
+                $ref: "#/components/schemas/ProductListResponse"
   /catalog/search:
     get:
       summary: Buscar productos por termino
@@ -55,12 +55,12 @@ paths:
           schema:
             type: string
       responses:
-        '200':
+        "200":
           description: Resultados de busqueda o estado vacio
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProductListResponse'
+                $ref: "#/components/schemas/ProductListResponse"
   /catalog/products/{productId}:
     get:
       summary: Obtener detalle de producto
@@ -73,18 +73,18 @@ paths:
             type: string
             format: uuid
       responses:
-        '200':
+        "200":
           description: Detalle de producto
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProductDetailResponse'
-        '404':
+                $ref: "#/components/schemas/ProductDetailResponse"
+        "404":
           description: Producto no disponible o inexistente
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     ProductCard:
@@ -108,18 +108,18 @@ components:
         recent:
           type: array
           items:
-            $ref: '#/components/schemas/ProductCard'
+            $ref: "#/components/schemas/ProductCard"
         recommendations:
           type: array
           items:
-            $ref: '#/components/schemas/ProductCard'
+            $ref: "#/components/schemas/ProductCard"
     ProductListResponse:
       type: object
       properties:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/ProductCard'
+            $ref: "#/components/schemas/ProductCard"
         page:
           type: integer
         pageSize:

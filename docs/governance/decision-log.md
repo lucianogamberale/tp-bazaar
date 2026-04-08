@@ -26,8 +26,8 @@
 
 ## Iteración 2 - Catálogo y Vendedor
 
-| ID    | Decisión                                              | Contexto                    | Opciones                                                | Impacto                            | Responsable    | Prioridad | Estado       | Fecha objetivo |
-| ----- | ----------------------------------------------------- | --------------------------- | ------------------------------------------------------- | ---------------------------------- | -------------- | --------- | ------------ | -------------- |
-| D-007 | Ownership escritura vs lectura en productos           | DD-013                      | A: Un solo servicio, B: Product escribe + Catalog lee   | Escalabilidad + claridad de dominio| Equipo Backend | Alta      | En análisis  | 2026-04-13     |
-| D-008 | Integración Product -> Catalog                        | DD-014                      | A: Sync HTTP, B: Async eventos                          | Consistencia + resiliencia         | Equipo Backend | Alta      | En análisis  | 2026-04-13     |
-| D-009 | Semántica de producto no disponible en detalle        | Catalog CA detalle          | A: 404, B: 410, C: 200 con estado de negocio            | UX + contratos                     | Equipo Backend | Media     | Abierta      | 2026-04-14     |
+| ID    | Decisión                                       | Contexto           | Opciones                                              | Impacto                             | Responsable    | Prioridad | Estado      | Fecha objetivo |
+| ----- | ---------------------------------------------- | ------------------ | ----------------------------------------------------- | ----------------------------------- | -------------- | --------- | ----------- | -------------- |
+| D-007 | Ownership escritura vs lectura en productos    | DD-013             | A: Un solo servicio, B: Product escribe + Catalog lee | Escalabilidad + claridad de dominio | Equipo Backend | Alta      | En análisis | 2026-04-13     |
+| D-008 | Integración Product -> Catalog                 | DD-014             | A: Sync HTTP, B: Async eventos                        | Consistencia + resiliencia          | Equipo Backend | Alta      | En análisis | 2026-04-13     |
+| D-009 | Semántica de producto no disponible en detalle | Catalog CA detalle | A: 404, B: 410, C: 200 con estado de negocio          | UX + contratos                      | Equipo Backend | Media     | Abierta     | 2026-04-14     |

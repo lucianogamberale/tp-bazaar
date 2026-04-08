@@ -43,7 +43,7 @@ Este backlog desagrega el descubrimiento por épicas en tareas pequeñas y revis
 
 | ID     | Tarea                                                   | Estado | Evidencia esperada              |
 | ------ | ------------------------------------------------------- | ------ | ------------------------------- |
-| DD-015 | Extraer CA obligatorios de Carrito                      | todo   | Trazabilidad actualizada        |
+| DD-015 | Extraer CA obligatorios de Carrito                      | done   | Trazabilidad actualizada        |
 | DD-016 | Extraer CA obligatorios de Checkout y Ordenes           | todo   | Trazabilidad actualizada        |
 | DD-017 | Definir invariantes de consistencia del flujo de compra | todo   | Decision-log + ADR candidato    |
 | DD-018 | Definir modelo de estados de orden                      | todo   | Documento de dominio y diagrama |

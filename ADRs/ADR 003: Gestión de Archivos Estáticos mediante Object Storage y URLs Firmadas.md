@@ -1,45 +1,89 @@
-[IMPORTANTE] no estoy seguro todavia de esto, capaz se puede guardar la imagen en la db y ya. 
-
 # ADR 003: Gestión de Archivos Estáticos, URLs Firmadas y Optimización Móvil
 
-**Fecha:** 7 de Abril de 2026  
-**Estado:** Aprobado  
-**Contexto:** Necesidad de almacenar y servir imágenes de perfil y de productos en el proyecto "Bazaar" minimizando costos, optimizando el rendimiento de la base de datos y protegiendo el ancho de banda de los usuarios móviles.
+## Estado
 
-## 1. El Problema
+Aprobado
 
-El almacenamiento de imágenes directamente en bases de datos relacionales (PostgreSQL) degrada el rendimiento de las consultas, aumenta los costos de respaldo y satura la memoria del servidor. Además, procesar subidas de archivos pesados a través de microservicios consume recursos críticos.
-Por otro lado, las cámaras de los dispositivos móviles modernos generan imágenes de entre 5MB y 10MB. Permitir la subida de estos archivos crudos saturaría el almacenamiento en la nube y haría que el catálogo de productos sea inmanejable y lento para los compradores.
+## Contexto
 
-## 2. Decisión Arquitectónica
+El enunciado exige soporte de imágenes para perfil y productos con restricciones explícitas:
 
-Se decide desacoplar el almacenamiento de archivos utilizando un modelo de **Almacenamiento de Objetos (Object Storage)** y **URLs Pre-firmadas (Presigned URLs)**, delegando el procesamiento pesado al cliente móvil.
+1. Formatos permitidos: JPEG, PNG o WebP.
+2. Tamaños máximos: 5 MB para perfil y 10 MB por imagen de producto.
 
-### 2.1. Proveedores Seleccionados (Costo $0)
+Problema a resolver:
 
-- **Desarrollo Local:** Se utilizará **MinIO** desplegado mediante Docker Compose (API compatible con S3).
-- **Entorno de Producción:** Se optará por **Supabase Storage** o **Cloudinary**, aprovechando sus capas gratuitas y CDN integrada.
+1. Evitar sobrecargar bases transaccionales con binarios grandes.
+2. Mantener performance y costo razonable en almacenamiento/transferencia.
+3. Permitir subida segura de archivos sin exponer infraestructura interna.
 
-### 2.2. Flujo de Subida de Archivos (Compresión y Presigned URLs)
+## Decisión
 
-Para evitar que los archivos pasen por nuestro backend y proteger el ancho de banda, el flujo estricto será:
+Se adopta almacenamiento de media en **Object Storage** y persistencia en bases de negocio solo de metadatos/referencias (`url`, `key`, `mime`, `size`, `owner`).
 
-1. **Selección y Compresión (Frontend):** El usuario selecciona una foto en la App Mobile. La aplicación (usando librerías nativas de React Native) **comprimirá la imagen localmente** reduciendo su calidad y dimensiones antes de enviarla.
-2. **Solicitud de URL (Backend):** El cliente solicita permiso de subida al `Profile Service` o `Catalog Service`.
-3. **Generación Segura:** El servicio genera una URL temporal firmada criptográficamente (vía S3 SDK).
-4. **Subida Directa (Cliente -> Storage):** El cliente realiza un `PUT` directo del archivo comprimido hacia el Object Storage usando dicha URL.
-5. **Confirmación:** El cliente notifica al backend el éxito de la subida para registrar la ruta en la base de datos de negocio.
+Se define el siguiente flujo de carga:
 
-## 3. Detalles de Implementación y Seguridad (Prevención de Abusos)
+1. Cliente solicita autorización de carga a backend.
+2. Backend valida intención de carga y genera URL prefirmada temporal.
+3. Cliente sube el archivo directamente al storage.
+4. Cliente confirma la carga para registrar referencia en servicio de dominio.
 
-Para evitar que usuarios malintencionados abusen de las URLs pre-firmadas subiendo malware (`.exe`) o archivos gigantes (`.mp4`), el backend aplicará restricciones estrictas al momento de generar la firma:
+Controles de seguridad mínimos:
 
-- **Validación de Tipo (MIME Type):** La URL firmada forzará un `ContentType` específico (ej. `image/jpeg`, `image/png`, `image/webp`). Si el cliente intenta hacer el `PUT` con otro tipo de archivo, el proveedor de la nube rechazará la subida automáticamente.
-- **Límite de Tamaño (Content-Length):** Se establecerá un límite estricto de tamaño en la firma (ej. máximo 2MB). Las imágenes que superen este peso serán rechazadas por el Object Storage.
-- **Ventana de Tiempo:** Las URLs de subida tendrán una validez máxima de 5 minutos.
-- **Sanitización:** Los nombres de los archivos se generarán en el backend utilizando UUIDs para evitar colisiones y ataques de inyección de rutas (Path Traversal).
+1. Validación de MIME permitido (`image/jpeg`, `image/png`, `image/webp`).
+2. Validación de tamaño según tipo de imagen (perfil o producto).
+3. URLs prefirmadas con expiración corta.
+4. Generación de claves de objeto seguras (UUID/ULID) para evitar colisiones.
 
-## 4. Consecuencias y Compromisos (Trade-offs)
+Implementación de costo:
 
-- **Complejidad en el Cliente:** Traslada la responsabilidad de manipular y comprimir imágenes a los desarrolladores de React Native, requiriendo el uso de librerías adicionales (ej. `react-native-image-crop-picker` o `react-native-image-resizer`).
-- **Gestión de Huérfanos:** Existe la posibilidad de que un usuario suba una imagen al Storage pero la red falle antes de notificar al backend (Paso 5). Se asume que la implementación de un script periódico de limpieza (Garbage Collection) o el uso de un ciclo de vida en el bucket (borrar archivos temporales no confirmados en 24h) mitigará este riesgo.
+1. Desarrollo local: solución S3-compatible local.
+2. Producción: proveedor con free tier o bajo costo, documentado en ADR de despliegue.
+
+## Alternativas consideradas
+
+1. **Guardar binarios en PostgreSQL (BLOB/bytea)**.
+
+- Pros: arquitectura más simple en etapa temprana.
+- Contras: crecimiento de DB, backups más costosos, peor performance para consultas transaccionales.
+
+2. **Pasar todos los uploads por backend y luego subir a storage**.
+
+- Pros: control centralizado del archivo.
+- Contras: mayor consumo de CPU/red en servicios de negocio y peor escalabilidad.
+
+3. **Object Storage + URL prefirmada (decisión elegida)**.
+
+- Pros: desacopla media de servicios core, escala mejor y reduce carga del backend.
+- Contras: mayor complejidad operativa y gestión de archivos huérfanos.
+
+## Consecuencias
+
+- Positivas:
+  - Menor presión sobre bases transaccionales.
+  - Mejor escalabilidad para catálogo y perfil.
+  - Menor costo relativo por almacenamiento de objetos.
+
+- Negativas o tradeoffs:
+  - Mayor complejidad en flujo de subida y confirmación.
+  - Necesidad de gobernar lifecycle de objetos (huérfanos, reemplazos, borrados).
+
+- Riesgos y mitigaciones:
+  - Riesgo: archivos huérfanos por cortes entre subida y confirmación.
+  - Mitigación: jobs de reconciliación/lifecycle rules por prefijo temporal.
+  - Riesgo: abuso de URLs prefirmadas.
+  - Mitigación: TTL corto, validación de MIME/tamaño y rate limiting en emisión.
+
+## Impacto en artefactos
+
+- OpenAPI afectado:
+  - Endpoints para solicitar URL prefirmada y confirmar carga.
+  - Endpoints de perfil/producto que persisten y exponen `avatar_url`/`image_url`.
+
+- Diagramas afectados:
+  - Secuencias de carga de imagen (cliente -> backend -> storage -> confirmación).
+  - C4 de contenedores con componente de Object Storage.
+
+- Servicios y datos impactados:
+  - Profile Service y Product&Inventory para metadatos de imágenes.
+  - Infraestructura de storage para objetos binarios.

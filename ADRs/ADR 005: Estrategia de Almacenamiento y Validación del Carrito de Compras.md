@@ -1,46 +1,66 @@
 # ADR 005: Estrategia de Almacenamiento y Validación del Carrito de Compras
 
-**Fecha:** 5 de Abril de 2026  
-**Estado:** Propuesto (En debate tecnológico)  
-**Contexto:** Dominio del Carrito de Compras ("Bazaar"), responsable de mantener el estado temporal de los productos seleccionados por el usuario antes de proceder al Checkout.
+## Estado
 
-## 1. El Problema y Contexto de Negocio
+Aprobado
 
-El carrito de compras maneja datos altamente volátiles (efímeros). Los usuarios agregan, modifican y eliminan productos constantemente, y muchos carritos son abandonados.
-Además, el sistema debe protegerse de inconsistencias de datos: no podemos permitir que un usuario pague el precio "viejo" de un producto que fue modificado mientras estaba en su carrito, ni permitir la compra de un artículo que fue deshabilitado por el vendedor o que se quedó sin stock.
+## Contexto
 
-## 2. Decisiones Arquitectónicas Base (Aprobadas)
+El dominio de carrito maneja estado efimero de alta frecuencia de cambios y abandono. Debe cumplir CAs obligatorios de la epica Carrito sin romper consistencia en Checkout:
 
-### 2.1. Bloqueo a Usuarios Anónimos
+- Persistir carrito por usuario entre sesiones y dispositivos autenticados.
+- Evitar precios stale y disponibilidad desactualizada al mostrar o confirmar compra.
+- Bloquear checkout cuando haya items invalidos (sin stock o deshabilitados).
+- Mantener ownership claro: Cart valida precondiciones de carrito; la validacion final de concurrencia/stock para compra pertenece al flujo de Checkout/Orden.
 
-Alineado con el Criterio de Aceptación 5 de la Épica Catálogo, **no se implementarán carritos locales ni basados en cookies para usuarios no logueados**. El Gateway rechazará cualquier petición al `Cart Service` que no contenga un token JWT válido del `IAM Service`.
+Ademas, existe una decision de infraestructura pendiente sobre el engine de almacenamiento del carrito (Redis vs PostgreSQL), pero no bloquea las reglas de negocio ya definidas.
 
-### 2.2. Patrón de "Hidratación" (Single Source of Truth para Precios)
+## Decisión
 
-Para evitar discrepancias financieras, la base de datos del carrito **solo almacenará referencias**: el `user_id`, el `product_id` y la `quantity` (cantidad).
-**No se guardarán precios, nombres ni estados en el carrito.** Cuando el usuario consulte su carrito, el `Cart Service` hará una consulta síncrona al `Catalog Service` (MongoDB) para "hidratar" la respuesta con los precios reales, el stock actual y el estado (activo/deshabilitado) en ese exacto milisegundo.
+Se adopta la siguiente estrategia funcional para Carrito:
 
-## 3. Opciones de Infraestructura (Para debate del equipo)
+1. Solo usuarios autenticados pueden operar carrito. No se implementa carrito anonimo local/cookie.
+2. El carrito persiste referencias (`user_id`, `product_id`, `quantity`) y no persiste precio ni estado del producto.
+3. En lectura de carrito, el servicio hidrata contra Catalog para exponer precio y disponibilidad vigentes.
+4. Al agregar o modificar cantidades, Cart valida contra disponibilidad actual y rechaza superar stock.
+5. Cuando un item queda no disponible, se marca en la respuesta y se bloquea checkout hasta que el usuario lo resuelva.
+6. La validacion transaccional final de concurrencia en compra no se resuelve en Cart; se delega a Checkout/Order.
 
-Se debe definir el motor de base de datos para el `Cart Service`. Se proponen dos alternativas viables:
+## Alternativas consideradas
 
-### Opción A: Redis (Base de datos Clave-Valor en memoria) - _Recomendada_
+1. Persistir snapshot de precio/estado en el carrito.
+2. Persistir solo referencias y recalcular/hidratar en lectura.
+3. Infraestructura Redis para estado efimero con TTL.
+4. Infraestructura PostgreSQL con expiracion gestionada por proceso de limpieza.
 
-- **Cómo funciona:** Se guarda un objeto JSON o Hash por usuario (ej. clave `cart:user_123`).
-- **Pros:** Velocidad de lectura/escritura sub-milisegundo. Soporta limpieza automática configurando un TTL (Time-To-Live), por ejemplo, que los carritos se borren solos a los 7 días de inactividad.
-- **Cons:** Introduce una nueva tecnología al stack del equipo que requiere configuración inicial.
+## Consecuencias
 
-### Opción B: PostgreSQL (Base de datos Relacional)
+- Positivas:
+  - Se reduce riesgo de cobrar precios desactualizados al no usar snapshots de precio en carrito.
+  - Se alinea el comportamiento con CAs de bloqueo por disponibilidad y persistencia por usuario autenticado.
+  - Se separan responsabilidades entre Cart y Checkout/Order, evitando logica transaccional duplicada.
+- Negativas o tradeoffs:
+  - La hidratacion agrega dependencia sincrona entre Cart y Catalog en lecturas.
+  - Mayor sensibilidad a latencia/fallas de Catalog durante consulta de carrito.
+- Riesgos y mitigaciones:
+  - Riesgo: diferencia temporal entre vista de carrito y momento de pago.
+    - Mitigacion: revalidacion obligatoria en Checkout/Order antes de confirmar orden.
+  - Riesgo: crecimiento de carritos abandonados.
+    - Mitigacion: politica de expiracion (TTL en Redis o job de limpieza en PostgreSQL).
+  - Riesgo: decision tardia de infraestructura.
+    - Mitigacion: mantener contrato y modelo logico agnosticos al engine para diferir eleccion sin reescribir APIs.
 
-- **Cómo funciona:** Tablas clásicas `carts` y `cart_items` ligadas por Foreign Keys.
-- **Pros:** El equipo ya está familiarizado con la tecnología y simplifica el despliegue local.
-- **Cons:** La escritura/lectura constante genera desgaste en el motor. Requiere programar un _CronJob_ (tarea programada en el backend) que corra diariamente ejecutando un `DELETE FROM carts WHERE updated_at < NOW() - INTERVAL '7 days'` para evitar acumulación de basura.
+## Impacto en artefactos
 
-## 4. Resolución de Casos Borde y Criterios de Aceptación (CA)
-
-El diseño propuesto resuelve los siguientes escenarios exigidos por la cátedra:
-
-1. **Persistencia Multi-dispositivo (CA 4 - Agregar producto):** Al estar vinculado al `user_id` en el backend, el usuario conserva su carrito independientemente de si entra desde la app móvil o la web.
-2. **Productos Deshabilitados/Sin Stock (CA 4 - Gestión):** Gracias a la "Hidratación", si un ítem en el carrito es deshabilitado por el vendedor, el sistema lo detecta al leer del Catálogo y bloquea el botón de Checkout, notificando visualmente al usuario.
-3. **Límite de Stock al Agregar (CA 3 - Agregar producto):** Antes de insertar o sumar cantidades en el carrito, se consulta el stock disponible en el Catálogo. Si la suma supera el límite físico, la API devuelve un error de validación (400 Bad Request).
-4. **Concurrencia Extrema en el Pago (CA 4 - Checkout):** El carrito asume que la validación final no le pertenece. Delega la responsabilidad de los bloqueos transaccionales por concurrencia ("dos usuarios comprando la última unidad al mismo tiempo") al `Order Service` durante el Checkout.
+- OpenAPI afectado:
+  - `POST /cart/items`
+  - `PATCH /cart/items/{itemId}`
+  - `DELETE /cart/items/{itemId}`
+  - `GET /cart`
+- Diagramas afectados:
+  - Secuencia de agregar item y gestion de carrito con validacion de stock/hidratacion.
+  - Secuencia de checkout mostrando revalidacion final fuera de Cart.
+- Servicios y datos impactados:
+  - Cart Service (modelo de item referencial + validaciones de disponibilidad).
+  - Catalog Service (fuente de verdad para precio/estado/stock en lectura de carrito).
+  - Order/Checkout (resolucion de concurrencia y confirmacion final de compra).

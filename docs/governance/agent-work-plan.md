@@ -10,6 +10,17 @@ Guiar la colaboración entre equipo y agentes de IA para descubrir dominio, cerr
 2. Coherencia entre ADRs, OpenAPI y diagramas.
 3. Evidencia de iteración y revisión de decisiones.
 
+## Estado final esperado (target)
+
+Al finalizar el camino de aprendizaje, el repositorio debe tener como minimo:
+
+1. Microservicios con responsabilidades y limites claramente definidos por dominio.
+2. Endpoints documentados por servicio en OpenAPI (requests, responses, errores).
+3. Diagramas C4 (Contexto, Contenedores, Componentes) consistentes con la descomposicion real.
+4. Diagramas de secuencia de los flujos criticos (registro, checkout, etc.).
+5. ADRs por decisiones relevantes, con alternativas descartadas y consecuencias.
+6. Matriz de trazabilidad completa: CA -> capacidad -> owner -> contrato/evento -> ADR.
+
 ## Flujo recomendado
 
 ### Fase A - Descubrimiento de dominio (Plan + Explore)
@@ -67,6 +78,17 @@ Salida:
 4. ¿Quedaron decisiones abiertas registradas con fecha y responsable?
 5. ¿Se actualizó la matriz de trazabilidad?
 
+### Marco de decision iterativa (caso por caso)
+
+Para cada duda de arquitectura, usar siempre esta secuencia:
+
+1. Problema: que CA/requisito exige resolver esta decision.
+2. Opciones: 2 o 3 alternativas concretas y comparables.
+3. Tradeoffs: impacto en complejidad, costo, resiliencia, mantenibilidad y time-to-market.
+4. Eleccion provisional: opcion recomendada para el checkpoint actual.
+5. Criterio de validacion: como sabremos rapido si la decision fue correcta.
+6. Registro: guardar la decision en `decision-log.md` y, si aplica, en ADR.
+
 ## Secuencia sugerida para descubrir dominio
 
 1. Usuarios + Perfil (base de identidad).
@@ -84,6 +106,21 @@ Salida:
 5. Contratos tempranos: escribir OpenAPI preliminar antes de implementar para detectar lagunas.
 6. Arquitectura trazable: toda decisión importante debe terminar en ADR con alternativas.
 7. Criterio de salida explícito: no avanzar de fase sin definir qué se considera "done".
+8. Vertical slices primero: cerrar un flujo extremo a extremo antes de abrir muchos frentes.
+9. ADRs livianos y frecuentes: registrar decisiones cuando se toman, no al final.
+10. Contrato antes que codigo: alinear backend y clientes desde OpenAPI.
+11. Resiliencia by design: explicitar idempotencia, retries y compensaciones en flujos distribuidos.
+12. Seguridad por defecto: nunca mezclar datos de identidad sensible con perfil publico.
+
+## Como guiar al agente en cada iteracion
+
+Para obtener mejores resultados, al iniciar cada sesion indicar:
+
+1. Epica objetivo y CA especificos.
+2. Alcance exacto de la iteracion (que SI y que NO).
+3. Artefacto esperado de salida (trazabilidad, ADR, OpenAPI, diagrama).
+4. Nivel de profundidad (borrador, intermedio, listo para presentar).
+5. Restricciones del checkpoint (tiempo, tecnologias, decisiones ya tomadas).
 
 ## Buenas practicas para prompts
 

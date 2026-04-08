@@ -45,7 +45,7 @@ Este backlog desagrega el descubrimiento por épicas en tareas pequeñas y revis
 | ------ | ------------------------------------------------------- | ------ | ------------------------------- |
 | DD-015 | Extraer CA obligatorios de Carrito                      | done   | Trazabilidad actualizada        |
 | DD-016 | Extraer CA obligatorios de Checkout y Ordenes           | done   | Trazabilidad actualizada        |
-| DD-017 | Definir invariantes de consistencia del flujo de compra | todo   | Decision-log + ADR candidato    |
+| DD-017 | Definir invariantes de consistencia del flujo de compra | done   | Decision-log + ADR candidato    |
 | DD-018 | Definir modelo de estados de orden                      | todo   | Documento de dominio y diagrama |
 
 ## Iteración 4 - Dominios transversales

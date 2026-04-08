@@ -31,3 +31,12 @@
 | D-007 | Ownership escritura vs lectura en productos    | DD-013             | A: Un solo servicio, B: Product escribe + Catalog lee | Escalabilidad + claridad de dominio | Equipo Backend | Alta      | En análisis | 2026-04-13     |
 | D-008 | Integración Product -> Catalog                 | DD-014             | A: Sync HTTP, B: Async eventos                        | Consistencia + resiliencia          | Equipo Backend | Alta      | En análisis | 2026-04-13     |
 | D-009 | Semántica de producto no disponible en detalle | Catalog CA detalle | A: 404, B: 410, C: 200 con estado de negocio          | UX + contratos                      | Equipo Backend | Media     | Abierta     | 2026-04-14     |
+
+## Iteración 3 - Carrito y Checkout
+
+| ID    | Decisión                                    | Contexto             | Opciones                                                 | Impacto                             | Responsable    | Prioridad | Estado      | Fecha objetivo |
+| ----- | ------------------------------------------- | -------------------- | -------------------------------------------------------- | ----------------------------------- | -------------- | --------- | ----------- | -------------- |
+| D-010 | Invariantes de consistencia del checkout    | DD-017               | A: invariantes explícitos, B: manejo ad-hoc por servicio | Consistencia distribuida            | Equipo Backend | Alta      | En análisis | 2026-04-15     |
+| D-011 | Momento de descuento de stock               | Checkout CA1/CA2/CA4 | A: antes de pago, B: al confirmar pago                   | Riesgo de sobreventa y compensación | Equipo Backend | Alta      | En análisis | 2026-04-15     |
+| D-012 | Estrategia de idempotencia en checkout/pago | Checkout CA5         | A: key por intento, B: sin key explícita                 | Riesgo de doble cobro               | Equipo Backend | Alta      | En análisis | 2026-04-15     |
+| D-013 | Política de concurrencia para último item   | Checkout CA4         | A: lock pesimista, B: validación optimista + retry       | Equidad + performance               | Equipo Backend | Media     | Abierta     | 2026-04-16     |

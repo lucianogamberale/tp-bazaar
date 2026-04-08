@@ -1,52 +1,92 @@
 # ADR 002: Separación de Dominios: Identidad (IAM) vs. Perfil de Usuario
 
-**Fecha:** 6 de Abril de 2026  
-**Estado:** Aprobado  
-**Contexto:** Gestión del ciclo de vida de usuarios en la plataforma "Bazaar".
+## Estado
 
-## 1. El Problema: El Antipatrón "God User" y Privacidad
+Aprobado
 
-Tradicionalmente, la información de un usuario se almacena en una única tabla o servicio. En una arquitectura de microservicios, esto genera:
+## Contexto
 
-- **Acoplamiento Excesivo:** El servicio de seguridad (IAM) se ve obligado a escalar innecesariamente cuando el catálogo consulta fotos de perfil.
-- **Riesgo de Seguridad:** Exposición de hashes de contraseñas en consultas de presentación pública.
-- **Inconsistencia en la Baja:** Cuando un usuario pide borrar su cuenta, si los datos están dispersos y no hay un flujo claro, quedan "datos fantasma" en el sistema.
+El enunciado separa explícitamente los dominios de Usuarios y Perfil:
 
-## 2. Decisión: División de Responsabilidades y Eventos de Ciclo de Vida
+1. Usuarios: registro, login, recupero, sesión y seguridad.
+2. Perfil: identidad visible (nombre, foto, descripción) y visualización pública/propia.
 
-Se divide el concepto de "Usuario" en dos microservicios independientes con bases de datos aisladas, comunicados mediante eventos asíncronos.
+Además, la arquitectura esperada es de microservicios con responsabilidades delimitadas y bases de datos independientes.
 
-### 2.1. IAM Service (Identity & Access Management)
+Problema a resolver:
 
-- **Misión:** Única fuente de verdad para seguridad. Responde a: _"¿Quién eres y es válida tu sesión?"_.
-- **Datos:** UUID (`account_id`), Email, Password Hash, Roles.
-- **Acción de Salida:** Publica eventos `UserRegistered` y `UserDeleted`.
+1. Evitar el antipatrón de "usuario único" que mezcla credenciales y datos públicos.
+2. Minimizar exposición de datos sensibles en consultas de perfil.
+3. Definir sincronización entre dominio de identidad (IAM) y dominio de perfil sin acoplamiento fuerte.
 
-### 2.2. Profile Service (Servicio de Perfiles)
+## Decisión
 
-- **Misión:** Gestión de identidad comercial y pública. Responde a: _"¿Cómo te ven los demás?"_.
-- **Datos:** Nombre, Apellido, Bio, URL de Avatar, Reputación.
-- **Acción de Entrada:** Escucha los eventos del IAM para crear o destruir perfiles locales.
+Se separa el concepto de usuario en dos bounded contexts:
 
-## 3. Gestión de la Baja (Derecho al Olvido)
+1. **IAM Service** (identidad y acceso): fuente de verdad para autenticación/autorización.
+2. **Profile Service** (identidad pública): fuente de verdad para datos visibles de perfil.
 
-Para garantizar la integridad y la privacidad del usuario, se implementa el siguiente flujo de borrado:
+Asignación de datos y responsabilidades:
 
-1. **Gatillo:** El Administrador (vía Web) o el Usuario (vía Mobile) solicita la baja.
-2. **IAM:** Marca al usuario como eliminado en su DB y revoca todos los tokens activos. Inmediatamente publica el evento `UserDeleted` en RabbitMQ.
-3. **Profile Service:** Al recibir `UserDeleted`, elimina físicamente la información personal (Nombre, Email, Bio) para cumplir con la privacidad.
-4. **Otros Servicios (Órdenes/Catálogo):** - El **Catálogo** oculta los productos del vendedor.
-   - El **Order Service** _anonimiza_ la orden (ej: cambia "Juan Pérez" por "Usuario Eliminado") pero **no borra la orden**, ya que debe persistir por razones contables y legales.
+1. IAM persiste: `account_id`, `email`, `password_hash`, `roles`, estado de sesión.
+2. Profile persiste: `user_id`, `display_name`, `bio`, `avatar_url` y campos públicos derivados.
+3. Profile no guarda secretos de autenticación.
+4. IAM no expone datos de perfil más allá de identificadores mínimos necesarios.
 
-## 4. Estrategia de Resiliencia (Consistency)
+Integración entre dominios:
 
-Debido a que los eventos pueden llegar desordenados o duplicados, aplicamos:
+1. Se usa integración asíncrona por eventos de ciclo de vida de cuenta (ejemplo: alta de usuario para bootstrap de perfil).
+2. Los consumidores deben ser idempotentes y tolerar duplicados/desorden de mensajes.
 
-- **Escrituras Defensivas (UPSERT):** Si el `Profile Service` recibe una edición de perfil antes que el evento de creación, usará `INSERT ... ON CONFLICT UPDATE` para no fallar.
-- **Idempotencia:** El consumidor de `UserDeleted` debe ser capaz de procesar el mensaje varias veces sin error, asegurando que si el perfil ya no existe, simplemente ignore la petición (`ACK`).
+Nota de alcance:
 
-## 5. Beneficios Obtenidos
+1. El evento de baja de usuario y su propagación se mantienen como decisión de diseño sujeta a validación de alcance por checkpoint.
 
-1. **Aislamiento de Seguridad:** El `Profile Service` puede estar en una zona de red más accesible, mientras que el `IAM` permanece protegido.
-2. **Cumplimiento Legal:** El flujo de `UserDeleted` garantiza que no queden datos sensibles tras la baja de un usuario.
-3. **Performance:** Las búsquedas de vendedores en el catálogo no tocan la base de datos de seguridad.
+## Alternativas consideradas
+
+1. **Modelo unificado (IAM + perfil en un solo servicio/BD)**.
+
+- Pros: menor complejidad inicial.
+- Contras: mayor riesgo de exposición de datos, acoplamiento y escalado conjunto.
+
+2. **Servicios separados con integración síncrona directa**.
+
+- Pros: consistencia inmediata.
+- Contras: más acoplamiento en tiempo de ejecución y mayor fragilidad ante fallos de red.
+
+3. **Servicios separados con eventos asíncronos (decisión elegida)**.
+
+- Pros: desacoplamiento, resiliencia y mejor escalabilidad.
+- Contras: consistencia eventual y necesidad de idempotencia.
+
+## Consecuencias
+
+- Positivas:
+  - Mejor aislamiento de seguridad entre credenciales y perfil público.
+  - Límites de dominio más claros para evolutividad y ownership de equipos.
+  - Menor carga del dominio IAM para lecturas de catálogo/perfiles.
+
+- Negativas o tradeoffs:
+  - Mayor complejidad de integración entre servicios.
+  - Consistencia eventual en creación/actualización de vistas de perfil.
+
+- Riesgos y mitigaciones:
+  - Riesgo: eventos duplicados o fuera de orden.
+  - Mitigación: consumidores idempotentes + escrituras defensivas (upsert).
+  - Riesgo: divergencia temporal entre IAM y Profile.
+  - Mitigación: reintentos, observabilidad y reconciliación periódica.
+
+## Impacto en artefactos
+
+- OpenAPI afectado:
+  - `docs/api/contracts/iam.openapi.yaml` (registro/login y lifecycle de cuenta).
+  - `docs/api/contracts/profile.openapi.yaml` (perfil propio/público).
+
+- Diagramas afectados:
+  - Secuencia de registro con bootstrap de perfil.
+  - C4 de contenedores con IAM, Profile y broker de eventos.
+
+- Servicios y datos impactados:
+  - IAM Service y su base aislada para seguridad.
+  - Profile Service y su base para identidad pública.
+  - Mensajería asíncrona para sincronizar ciclo de vida de cuenta.

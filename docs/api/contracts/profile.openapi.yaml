@@ -1,0 +1,60 @@
+openapi: 3.0.3
+info:
+  title: Profile Service API
+  version: 0.1.0
+  description: Contrato inicial del servicio de perfiles.
+servers:
+  - url: https://api.example.com
+paths:
+  /profile/me:
+    get:
+      summary: Obtener perfil propio
+      tags: [Profile]
+      responses:
+        "200":
+          description: Perfil encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileResponse"
+    patch:
+      summary: Editar perfil propio
+      tags: [Profile]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProfileRequest"
+      responses:
+        "200":
+          description: Perfil actualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileResponse"
+components:
+  schemas:
+    UpdateProfileRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        bio:
+          type: string
+        avatarUrl:
+          type: string
+          format: uri
+    ProfileResponse:
+      type: object
+      properties:
+        userId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        bio:
+          type: string
+        avatarUrl:
+          type: string
+          format: uri

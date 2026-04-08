@@ -1,0 +1,22 @@
+sequenceDiagram
+    autonumber
+    participant C as Cliente
+    participant G as API Gateway
+    participant I as IAM Service
+    participant IDB as PostgreSQL IAM
+    participant MQ as RabbitMQ
+    participant P as Profile Service
+    participant PDB as PostgreSQL Profile
+
+    C->>G: POST /auth/register {name,email,password}
+    G->>I: Forward request de registro
+    I->>I: Validar email y password
+    I->>IDB: Crear cuenta y guardar password hash
+    IDB-->>I: Cuenta creada
+    I-->>G: 201 Created
+    G-->>C: 201 Created
+
+    I->>MQ: Publicar UserRegistered
+    MQ-->>P: Entregar UserRegistered
+    P->>PDB: Crear perfil publico inicial
+    PDB-->>P: Perfil creado

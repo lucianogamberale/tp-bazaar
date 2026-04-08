@@ -1,0 +1,15 @@
+%% C4 - Nivel Contexto (Mermaid)
+flowchart LR
+    U[Usuarios: Comprador, Vendedor, Admin]
+    M[Mobile App]
+    W[Web Backoffice]
+    B[Bazaar Platform]
+    P[Pasarela de Pagos Externa]
+    F[Proveedor Push Notifications]
+
+    U --> M
+    U --> W
+    M --> B
+    W --> B
+    B --> P
+    B --> F

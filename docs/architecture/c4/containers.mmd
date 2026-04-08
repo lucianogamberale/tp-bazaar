@@ -1,0 +1,45 @@
+%% C4 - Nivel Contenedores (Mermaid)
+flowchart LR
+    subgraph Clients
+      Mobile[Mobile App]
+      Backoffice[Web Backoffice]
+    end
+
+    Gateway[API Gateway]
+    IAM[IAM Service]
+    Profile[Profile Service]
+    Catalog[Catalog Service]
+    Product[Product and Inventory Service]
+    Cart[Cart Service]
+    Order[Order Service]
+    Rabbit[RabbitMQ]
+
+    IAMDB[(PostgreSQL IAM)]
+    ProfileDB[(PostgreSQL Profile)]
+    ProductDB[(PostgreSQL Product)]
+    CatalogDB[(MongoDB Catalog)]
+    CartDB[(Redis Cart)]
+    OrderDB[(PostgreSQL Orders)]
+
+    Mobile --> Gateway
+    Backoffice --> Gateway
+
+    Gateway --> IAM
+    Gateway --> Profile
+    Gateway --> Catalog
+    Gateway --> Product
+    Gateway --> Cart
+    Gateway --> Order
+
+    IAM --> IAMDB
+    Profile --> ProfileDB
+    Product --> ProductDB
+    Catalog --> CatalogDB
+    Cart --> CartDB
+    Order --> OrderDB
+
+    IAM --> Rabbit
+    Product --> Rabbit
+    Order --> Rabbit
+    Rabbit --> Profile
+    Rabbit --> Catalog

@@ -1,0 +1,16 @@
+%% C4 - Nivel Componentes (Plantilla)
+flowchart TD
+    A[API Layer]
+    B[Application Layer]
+    C[Domain Layer]
+    D[Infrastructure Layer]
+    E[(Database)]
+    Q[Message Broker]
+
+    A --> B
+    B --> C
+    B --> D
+    D --> E
+    D --> Q
+
+%% Duplicar esta plantilla por servicio y completar responsabilidades concretas.

@@ -1,0 +1,23 @@
+sequenceDiagram
+    autonumber
+    participant C as Cliente
+    participant G as API Gateway
+    participant I as IAM Service
+    participant IDB as PostgreSQL IAM
+
+    C->>G: POST /auth/login {email,password}
+    G->>I: Forward login request
+    I->>IDB: Buscar cuenta por email
+    IDB-->>I: Cuenta + passwordHash (si existe)
+    I->>I: Verificar password y estado de cuenta
+
+    alt Credenciales válidas
+        I-->>G: 200 OK + sesión (token/cookie)
+        G-->>C: 200 OK (sesión activa)
+    else Credenciales inválidas o email inexistente
+        I-->>G: 401 Unauthorized (mensaje genérico)
+        G-->>C: 401 Unauthorized (mensaje genérico)
+    end
+
+    Note over C,G: Si la sesión expira en una acción autenticada,
+    Note over C,G: el cliente debe redirigir a login y preservar acción pendiente.

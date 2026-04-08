@@ -17,9 +17,9 @@ Este backlog desagrega el descubrimiento por épicas en tareas pequeñas y revis
 | DD-001 | Extraer CA de Registro (1 a 4) textual                     | done   | Fila creada en matriz de trazabilidad |
 | DD-002 | Mapear capacidades para Registro                           | done   | Capacidad por CA en trazabilidad      |
 | DD-003 | Proponer owner provisional para cada capacidad de Registro | done   | Owner en trazabilidad                 |
-| DD-004 | Extraer CA de Login (1 a 4) textual                        | todo   | Fila creada en trazabilidad           |
-| DD-005 | Mapear capacidades para Login                              | todo   | Capacidad por CA en trazabilidad      |
-| DD-006 | Registrar decisiones abiertas de Registro/Login            | todo   | Entrada en decision-log               |
+| DD-004 | Extraer CA de Login (1 a 4) textual                        | done   | Fila creada en trazabilidad           |
+| DD-005 | Mapear capacidades para Login                              | done   | Capacidad por CA en trazabilidad      |
+| DD-006 | Registrar decisiones abiertas de Registro/Login            | done   | Entrada en decision-log               |
 
 ### Bloque B: Perfil
 

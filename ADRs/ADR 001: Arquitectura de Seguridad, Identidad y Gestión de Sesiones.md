@@ -1,57 +1,92 @@
 # ADR 001: Arquitectura de Seguridad, Identidad y Gestión de Sesiones
 
-**Fecha:** 5 de Abril de 2026
-**Proyecto:** 2026C1 - Bazaar
-**Estado:** Aprobado
-**Autores:** Equipo de Arquitectura Backend
+## Estado
 
-## 1. Contexto y Problema
+Aprobado
+
+## Contexto
 
 El ecosistema de "Bazaar" requiere una arquitectura de microservicios que soporte múltiples clientes con naturalezas tecnológicas distintas: una aplicación móvil en React Native (orientada a Compradores y Vendedores) y un panel de administración Web (SPA en React).
 
-Debemos garantizar que:
+El enunciado exige además:
+
+1. API Gateway como punto único de entrada con validación de tokens y rate limiting.
+2. Tokens de sesión con expiración y soporte de refresh.
+3. Seguridad en endpoints sensibles (login/recupero) y control de acceso por roles.
+
+Debemos garantizar:
 
 1. Los microservicios internos no se saturen validando sesiones contra la base de datos en cada petición.
 2. La aplicación móvil almacene las credenciales de forma segura.
 3. El panel web esté protegido contra vectores de ataque comunes en navegadores, específicamente **XSS (Cross-Site Scripting)** y **CSRF (Cross-Site Request Forgery)**.
 4. Exista un control estricto de roles (RBAC) y un mecanismo seguro para el cierre de sesión (Logout).
 
-## 2. Decisiones Arquitectónicas
+## Decisión
 
 Se adopta una arquitectura de **Autenticación Sin Estado (Stateless)** basada en el estándar **JWT (JSON Web Tokens)**, centralizando la emisión de credenciales en un **IAM Service (Identity and Access Management)** y delegando la validación perimetral a un **API Gateway**.
 
-### 2.1. Ciclo de Vida de los Tokens
+Se define el siguiente esquema operativo:
 
-Se implementará un sistema de doble token para balancear seguridad y experiencia de usuario (UX):
+1. **Access Token (JWT)** de corta duración con `user_id` y `roles`.
+2. **Refresh Token** de mayor duración para renovar sesión sin reingresar credenciales.
+3. **Validación perimetral en Gateway**: firma JWT, expiración y reglas globales de acceso/rate limiting.
+4. **Autorización de negocio en microservicios**: ownership y reglas específicas por recurso.
+5. **Logout**: invalidación de refresh token + limpieza del almacenamiento del cliente.
 
-- **Access Token (JWT):** Tiempo de vida corto (ej. 15 minutos). Contiene el _payload_ de identidad (ID de usuario, roles). Será utilizado para autorizar las peticiones a los microservicios.
-- **Refresh Token (Opaco/JWT de larga duración):** Tiempo de vida largo (ej. 7 días). Se utiliza exclusivamente para solicitar un nuevo Access Token cuando este expira, sin pedirle al usuario que vuelva a ingresar su contraseña.
+Detalles relevantes de decisión:
 
-### 2.2. Validación de Identidad y Autorización de Roles (RBAC)
+- **Access Token (JWT):** duración corta (ejemplo de referencia: 15 minutos).
+- **Refresh Token:** duración mayor (ejemplo de referencia: 7 días).
+- **Mobile:** tokens en almacenamiento seguro del dispositivo.
+- **Web:** tokens en cookies seguras (`HttpOnly`, `Secure`, `SameSite`).
 
-Para evitar que tráfico malicioso alcance nuestra red interna, se establece la siguiente frontera de responsabilidades:
+## Alternativas consideradas
 
-- **Responsabilidad del API Gateway (Validación de grano grueso):** El Gateway interceptará toda petición entrante. Verificará criptográficamente la firma del JWT (sin ir a la base de datos) usando la clave pública del IAM Service. Además, validará el acceso a rutas globales; por ejemplo, si la ruta empieza con `/api/admin/*`, el Gateway bloqueará automáticamente la petición con un `403 Forbidden` si el JWT no contiene el rol `ADMIN`.
-- **Responsabilidad de los Microservicios (Validación de grano fino):** Los microservicios asumen que si la petición llegó, la identidad es real. Ellos se encargarán de la autorización de negocio. Por ejemplo, el `Order Service` verificará que el `user_id` del token coincida con el `buyer_id` de la orden antes de devolver el historial de compras.
+1. **Sesiones stateful en base de datos por request**.
 
-### 2.3. Almacenamiento Seguro por Plataforma
+- Pros: revocación inmediata y simple.
+- Contras: alto costo de I/O y menor escalabilidad en arquitectura distribuida.
 
-- **Aplicación Mobile (React Native):** Al no ser vulnerables a CSRF ni XSS tradicional, ambos tokens se almacenarán en el almacenamiento seguro nativo del dispositivo (ej. `SecureStore` en Expo / `Keychain`). El cliente inyectará el Access Token en el header `Authorization: Bearer <token>`.
-- **Panel Administrativo (Web React):** Para evitar el robo de tokens vía XSS, el Frontend no tendrá acceso directo al token mediante JavaScript. El API Gateway (o el IAM) enviará los tokens utilizando cookies seguras:
-  - `HttpOnly`: Invisible para JavaScript.
-  - `Secure`: Transmisión exclusiva sobre HTTPS.
-  - `SameSite=Strict`: El navegador solo adjuntará la cookie si la petición se origina exactamente en el mismo dominio (mitiga CSRF).
+2. **JWT sin refresh token**.
 
-### 2.4. Mecanismo de Cierre de Sesión (Logout)
+- Pros: implementación más simple.
+- Contras: peor UX por relogin frecuente y mayor fricción en clientes móviles.
 
-Dado que los JWT son "stateless" y no pueden borrarse mágicamente de la red una vez emitidos, el flujo de Logout será el siguiente:
+3. **Validación completa de autorización solo en gateway**.
 
-1. El cliente (App o Web) hace una petición `POST /auth/logout`.
-2. El **IAM Service** recibe la petición y elimina/invalida el **Refresh Token** de su base de datos o caché, impidiendo futuras renovaciones.
-3. El cliente borra los tokens de su almacenamiento local (SecureStore o borrado de Cookies).
-4. El Access Token remanente vivirá como máximo 15 minutos (hasta su expiración natural), minimizando la ventana de exposición.
+- Pros: punto único de control.
+- Contras: acoplamiento excesivo del gateway a reglas de negocio y pérdida de defensa en profundidad.
 
-## 3. Consecuencias y Compromisos (Trade-offs)
+## Consecuencias
 
-- **Complejidad del Cliente:** Los desarrolladores frontend y mobile deberán implementar interceptores robustos en Axios/Fetch para manejar las transiciones de expiración (`401 Unauthorized`) y ejecutar el refresco ("Silent Refresh") de manera transparente para el usuario.
-- **Revocación Diferida:** Al usar JWT sin estado, la revocación absoluta no es inmediata. En caso de un compromiso crítico (ej. baneo de un usuario o robo de cuenta detectado), el IAM Service deberá emitir un evento para agregar ese token a una "Blacklist" temporal en Redis alojada en el API Gateway, añadiendo una ligera penalización de latencia en peticiones de alta seguridad.
+- Positivas:
+  - Escalabilidad al evitar validación de sesión contra DB en cada request.
+  - Mejor UX con refresh token y sesiones renovables.
+  - Alineación con requerimiento de API Gateway y rate limiting.
+  - Separación clara entre autorización perimetral y autorización de negocio.
+
+- Negativas o tradeoffs:
+  - Revocación de access token no inmediata por naturaleza stateless.
+  - Mayor complejidad en frontend/mobile para manejar refresh y expiraciones.
+  - Operación adicional de seguridad para rotación de claves y manejo de cookies en web.
+
+- Riesgos y mitigaciones:
+  - Riesgo: uso indebido de token robado durante ventana de expiración.
+  - Mitigación: access token corto + refresh invalidable + rotación de claves.
+  - Riesgo: abuso en endpoints de autenticación.
+  - Mitigación: rate limiting por IP y por cuenta en login/recupero.
+
+## Impacto en artefactos
+
+- OpenAPI afectado:
+  - `docs/api/contracts/iam.openapi.yaml` (`/auth/register`, `/auth/login`, futuro `/auth/refresh`, `/auth/logout`).
+  - Contratos del gateway para políticas de autenticación/autorización.
+
+- Diagramas afectados:
+  - C4 de contenedores (`docs/architecture/c4/containers.mmd`) con gateway e IAM.
+  - Secuencias de registro/login y refresh/logout.
+
+- Servicios y datos impactados:
+  - IAM Service: emisión, refresh y revocación de tokens.
+  - API Gateway: validación de JWT y rate limiting.
+  - Clientes Web/Mobile: estrategia de almacenamiento y renovación de sesión.

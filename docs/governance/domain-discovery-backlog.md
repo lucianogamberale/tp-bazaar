@@ -25,10 +25,10 @@ Este backlog desagrega el descubrimiento por épicas en tareas pequeñas y revis
 
 | ID     | Tarea                                                      | Estado | Evidencia esperada                     |
 | ------ | ---------------------------------------------------------- | ------ | -------------------------------------- |
-| DD-007 | Extraer CA de Edicion de perfil (1 a 3)                    | todo   | Fila creada en trazabilidad            |
-| DD-008 | Mapear capacidades para Edicion de perfil                  | todo   | Capacidad por CA en trazabilidad       |
-| DD-009 | Definir limites IAM vs Profile para esos CA                | todo   | Documento identity-profile actualizado |
-| DD-010 | Registrar riesgos tecnicos (foto, validaciones, sincronia) | todo   | Entrada en decision-log                |
+| DD-007 | Extraer CA de Edicion de perfil (1 a 3)                    | done   | Fila creada en trazabilidad            |
+| DD-008 | Mapear capacidades para Edicion de perfil                  | done   | Capacidad por CA en trazabilidad       |
+| DD-009 | Definir limites IAM vs Profile para esos CA                | done   | Documento identity-profile actualizado |
+| DD-010 | Registrar riesgos tecnicos (foto, validaciones, sincronia) | done   | Entrada en decision-log                |
 
 ## Iteración 2 - Catalogo y Vendedor
 

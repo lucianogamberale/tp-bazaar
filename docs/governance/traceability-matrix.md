@@ -38,3 +38,11 @@ Tabla base para mapear requerimientos del enunciado hacia capacidades, owners y 
 | Usuarios | Login    | CA2 | Obligatoria | Responder error genérico ante contraseña incorrecta | IAM           | POST /auth/login  | ADR-001 | Definido | No revelar si falló email o password                                |
 | Usuarios | Login    | CA3 | Obligatoria | Responder error genérico ante email no registrado   | IAM           | POST /auth/login  | ADR-001 | Definido | Debe ser indistinguible de CA2 para evitar enumeración de cuentas   |
 | Usuarios | Login    | CA4 | Obligatoria | Detectar sesión expirada y forzar reautenticación   | IAM + Gateway | Authorization JWT | ADR-001 | Validar  | Falta definir mecanismo para preservar acción pendiente en frontend |
+
+## Iteración 1 - Perfil (Edición de perfil)
+
+| Épica  | Historia          | CA  | Tipo        | Capacidad del sistema                                             | Owner   | Contrato o Evento | ADR     | Estado   | Notas                                                                    |
+| ------ | ----------------- | --- | ----------- | ----------------------------------------------------------------- | ------- | ----------------- | ------- | -------- | ------------------------------------------------------------------------ |
+| Perfil | Edición de perfil | CA1 | Obligatoria | Persistir cambios válidos de nombre, foto y descripción           | Profile | PATCH /profile/me | ADR-002 | Definido | Reflejo inmediato en respuesta de perfil propio                          |
+| Perfil | Edición de perfil | CA2 | Obligatoria | Actualizar imagen de perfil y propagarla a vistas de identidad    | Profile | PATCH /profile/me | ADR-003 | Validar  | Falta cerrar estrategia final de media (URL firmada/publica, validacion) |
+| Perfil | Edición de perfil | CA3 | Obligatoria | Validar datos de perfil y rechazar persistencia en caso inválido  | Profile | PATCH /profile/me | ADR-002 | Definido | Devolver errores de validación por campo                                 |

@@ -16,12 +16,14 @@ Este documento describe la separación de responsabilidades entre IAM y Profile 
 - Login y manejo de sesión.
 - Credenciales y seguridad.
 - Validación de password y email.
+- No gestiona foto, bio ni campos de identidad pública.
 
 ### Profile Service
 
 - Datos públicos y editables del perfil.
 - Visualización y edición de perfil propio.
 - Gestión de foto, nombre y descripción.
+- No gestiona contraseñas, tokens ni autenticación primaria.
 
 ## Datos por servicio
 
@@ -32,6 +34,18 @@ Este documento describe la separación de responsabilidades entre IAM y Profile 
 
 - Evento candidato: UserRegistered.
 - Propósito: bootstrap de perfil al crear cuenta.
+
+## Capacidades del dominio (iteración actual)
+
+1. Registro y login en IAM (`POST /auth/register`, `POST /auth/login`).
+2. Edición de perfil en Profile (`PATCH /profile/me`).
+3. Lectura de perfil propio en Profile (`GET /profile/me`).
+
+## Riesgos y decisiones abiertas de Perfil
+
+1. Foto de perfil: definir URL pública o firmada y pipeline de validación.
+2. Validaciones: definir reglas mínimas de nombre, bio y formato de URL.
+3. Semántica de actualización: confirmar PATCH parcial como contrato estándar.
 
 ## Decisiones abiertas
 

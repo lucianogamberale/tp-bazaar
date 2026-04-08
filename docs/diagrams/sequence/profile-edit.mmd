@@ -1,0 +1,20 @@
+sequenceDiagram
+    autonumber
+    participant C as Cliente
+    participant G as API Gateway
+    participant P as Profile Service
+    participant PDB as PostgreSQL Profile
+
+    C->>G: PATCH /profile/me {name,bio,avatarUrl}
+    G->>P: Forward request autenticada
+    P->>P: Validar campos de perfil
+
+    alt Datos válidos
+        P->>PDB: Actualizar perfil
+        PDB-->>P: Perfil actualizado
+        P-->>G: 200 OK + perfil actualizado
+        G-->>C: 200 OK + cambios reflejados
+    else Datos inválidos
+        P-->>G: 400 Bad Request + errores por campo
+        G-->>C: 400 Bad Request + errores por campo
+    end

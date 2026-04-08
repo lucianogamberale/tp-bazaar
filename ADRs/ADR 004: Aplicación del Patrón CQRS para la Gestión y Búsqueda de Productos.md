@@ -1,55 +1,83 @@
 # ADR 004: Aplicación del Patrón CQRS para la Gestión y Búsqueda de Productos
 
-**Fecha:** 5 de Abril de 2026  
-**Estado:** Propuesto / Aprobado  
-**Contexto:** Dominio de Productos, Inventario y Catálogo e n la plataforma "Bazaar".
+## Estado
 
-## 1. El Problema: Asimetría de Cargas y Modelos de Datos
+Aprobado
 
-En la plataforma Bazaar, el comportamiento sobre los productos presenta dos perfiles diametralmente opuestos:
+## Contexto
 
-- **Escritura (Vendedores):** Baja frecuencia. Requiere validaciones estrictas de negocio (precios positivos, stock exacto) y garantías ACID para no perder información financiera.
-- **Lectura (Compradores):** Altísima frecuencia. Requiere búsquedas difusas rápidas, filtros combinados dinámicos y agregación de datos (reputación del vendedor, imágenes, categorías) en una sola vista.
+El enunciado define una asimetría clara entre:
 
-Si utilizamos un único microservicio con una base de datos relacional para ambas tareas, las lecturas masivas del catálogo penalizarán el rendimiento de las transacciones críticas de inventario, y nos veremos obligados a ejecutar consultas complejas (`JOINs`) para renderizar la página de inicio, afectando la experiencia de usuario.
+1. Operaciones de escritura sobre productos/stock (vendedor).
+2. Operaciones de lectura masiva para catálogo (comprador).
 
-## 2. Decisión Arquitectónica: Segregación CQRS
+Además, se requiere arquitectura de microservicios con responsabilidades delimitadas y uso de al menos una tecnología SQL y una NoSQL.
 
-Se decide implementar el patrón **CQRS (Command Query Responsibility Segregation)** apoyado en un modelo de consistencia eventual. Separaremos el dominio en dos microservicios con tecnologías de persistencia distintas:
+Problema a resolver:
 
-### A. Product & Inventory Service (Comandos / Escritura)
+1. Evitar que lecturas masivas degraden operaciones transaccionales de inventario.
+2. Mantener búsquedas y filtros rápidos en catálogo.
+3. Proteger la consistencia en checkout ante eventual consistency de vistas de lectura.
 
-- **Base de Datos:** PostgreSQL (Relacional).
-- **Responsabilidad:** Es la "Fuente de Verdad" absoluta. Gestiona la creación, edición, deshabilitación y el stock físico de los productos.
-- **Ventaja:** Garantiza la integridad transaccional mediante bloqueos de fila (`SELECT ... FOR UPDATE`) críticos para evitar sobreventas en el _Checkout_.
+## Decisión
 
-### B. Catalog Service (Consultas / Lectura)
+Se adopta segregación **CQRS** para el dominio de productos:
 
-- **Base de Datos:** MongoDB (NoSQL Documental).
-- **Responsabilidad:** Es la "Vidriera". Resuelve las búsquedas, filtros y ordenamientos de la _Home_ y la página de detalle del producto.
-- **Ventaja:** Cumple con el requerimiento técnico de la cátedra de usar NoSQL, permitiendo almacenar cada producto como un documento pre-ensamblado (desnormalizado), optimizando los tiempos de respuesta al máximo.
+1. **Product & Inventory Service (write model)** con base SQL para comandos críticos.
+2. **Catalog Service (read model)** con base documental para consultas de alta frecuencia.
+3. Sincronización asíncrona por eventos de ciclo de vida de producto/stock.
 
-### C. Sincronización (El Pegamento)
+Responsabilidades resultantes:
 
-Ambos servicios se comunicarán de forma asíncrona mediante un _Message Broker_ (RabbitMQ / Kafka). Cuando el `Product Service` confirma una escritura, emite un evento (ej. `ProductCreated` o `ProductDisabled`). El `Catalog Service` consume este evento y actualiza su documento en MongoDB.
+1. Product & Inventory: crear/editar/deshabilitar producto y gestionar stock como fuente de verdad.
+2. Catalog: home, listado, búsqueda, filtros y detalle orientados a lectura.
+3. Order/Checkout: validación final de disponibilidad contra write model antes de confirmar compra.
 
-## 3. Manejo de Casos Borde y Consistencia Eventual
+## Alternativas consideradas
 
-El equipo reconoce que la comunicación asíncrona introduce una **ventana de consistencia eventual** (latencia de red entre que se actualiza PostgreSQL y se actualiza MongoDB).
+1. **Modelo único (comandos y consultas en el mismo servicio/BD)**.
 
-**Escenario de Riesgo (El Producto Fantasma):**
+- Pros: menor complejidad inicial.
+- Contras: contención de recursos y escalado acoplado.
 
-1. Un vendedor "Deshabilita" un producto (o su stock llega a cero).
-2. Se actualiza PostgreSQL instantáneamente.
-3. El evento se demora en la cola de mensajes 2 segundos por alta concurrencia.
-4. En ese lapso de 2 segundos, un comprador busca en el Catálogo (MongoDB). El producto aún figura como "Activo".
-5. El comprador intenta agregarlo al carrito o comprarlo.
+2. **Separación lógica sin proyección asíncrona (lectura directa al write model)**.
 
-**Mitigación Estratégica (Validación Transaccional):**
-Adoptamos la máxima arquitectónica: _"El catálogo puede mentir, pero el Checkout no puede mentir"_.
-Para mitigar este caso borde, el `Order Service` (encargado del pago) **nunca confiará en los datos provenientes del Catálogo o del Carrito al momento de cobrar**. Al iniciar el Checkout, realizará una validación síncrona obligatoria contra el `Product & Inventory Service` (PostgreSQL).
-Si el producto fue deshabilitado hace milisegundos, PostgreSQL bloqueará la operación, el Checkout será abortado y se notificará al usuario, cumpliendo así con los Criterios de Aceptación del negocio de manera segura y controlada.
+- Pros: consistencia inmediata.
+- Contras: consultas más costosas para búsqueda/filtros y menor elasticidad en lectura.
 
-## 4. Conclusión
+3. **CQRS con proyección asíncrona (decisión elegida)**.
 
-Esta separación nos permite escalar el tráfico de búsquedas de manera independiente sin poner en riesgo la base de datos transaccional, justifica académicamente el uso de NoSQL (MongoDB) en el entorno ideal (búsquedas documentales) y establece fronteras claras de responsabilidad en el equipo de desarrollo.
+- Pros: mejor performance de lectura y desacople de escalado.
+- Contras: consistencia eventual y mayor complejidad operativa.
+
+## Consecuencias
+
+- Positivas:
+  - Escalado independiente de lectura y escritura.
+  - Mejor rendimiento de catálogo en home/búsqueda.
+  - Protección del write model para operaciones críticas de stock.
+
+- Negativas o tradeoffs:
+  - Ventana de inconsistencia temporal entre write y read models.
+  - Mayor necesidad de observabilidad y reintentos en proyección.
+
+- Riesgos y mitigaciones:
+  - Riesgo: producto desactualizado en catálogo durante propagación.
+  - Mitigación: checkout valida contra Product&Inventory antes de cobrar.
+  - Riesgo: eventos duplicados/fuera de orden.
+  - Mitigación: consumidores idempotentes + upsert en read model.
+
+## Impacto en artefactos
+
+- OpenAPI afectado:
+  - `docs/api/contracts/catalog.openapi.yaml` (consultas de catálogo).
+  - Contratos de Product&Inventory para escritura de productos/stock.
+
+- Diagramas afectados:
+  - Secuencia de publicación y sincronización Product -> Catalog.
+  - C4 de contenedores con separación de write/read models.
+
+- Servicios y datos impactados:
+  - Product&Inventory (SQL transaccional).
+  - Catalog (NoSQL documental para lectura).
+  - Broker/eventos para proyecciones de catálogo.

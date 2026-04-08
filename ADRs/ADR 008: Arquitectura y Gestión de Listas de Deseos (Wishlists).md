@@ -1,42 +1,62 @@
 # ADR 008: Arquitectura y Gestión de Listas de Deseos (Wishlists)
 
-**Fecha:** 7 de Abril de 2026  
-**Estado:** Propuesto / Aprobado  
-**Contexto:** Épica 10 (Funcionalidad de "Favoritos" o "Guardar para después").
+## Estado
 
-## 1. El Problema y Contexto de Negocio
+Propuesto
 
-El Criterio de Aceptación de la Épica 10 establece que el comprador debe poder marcar productos como "Favoritos" para comprarlos en el futuro.
-Intentar alojar esta funcionalidad en los microservicios existentes presenta graves problemas arquitectónicos:
+## Contexto
 
-- **Por qué no en el `Cart Service`:** El carrito usa Redis y tiene un TTL estricto de 7 días (se auto-destruye). La Wishlist, en cambio, debe ser persistente en el tiempo (el usuario espera ver sus favoritos guardados meses después).
-- **Por qué no en el `Profile Service`:** Acoplaríamos el perfil de identidad del usuario con su intención comercial, rompiendo el Principio de Responsabilidad Única.
-- **Por qué no en el `Catalog Service`:** El catálogo (MongoDB) está optimizado para lecturas masivas. Las acciones de "Like / Unlike" generan una altísima tasa de escritura (es el botón más presionado en un e-commerce después del scroll), lo cual degradaría el rendimiento de las búsquedas de otros usuarios.
+La epica Wishlist es optativa, pero requiere cubrir reglas claras:
 
-## 2. Decisión Arquitectónica: Wishlist Service Dedicado
+- Agregar y quitar productos para usuario autenticado.
+- Mostrar indicador en catalogo de si el producto ya esta en wishlist.
+- Mantener items sin stock o deshabilitados en la lista, marcados como no disponibles.
+- Mostrar estado vacio cuando no haya favoritos.
 
-Se decide implementar un microservicio ligero y dedicado exclusivamente a esta función: el **Wishlist Service**.
+Wishlist tiene semantica distinta a Carrito: no es transaccional de compra inmediata y no debe expirar agresivamente por TTL corto.
 
-### 2.1. Base de Datos
+## Decisión
 
-- Se utilizará **PostgreSQL**.
-- **Justificación:** La estructura de datos es una relación simple de _muchos-a-muchos_ (`user_id` y `product_id`). PostgreSQL manejará esta tabla asociativa de manera extremadamente eficiente, garantizando la persistencia a largo plazo.
+Se propone un servicio dedicado de Wishlist con almacenamiento relacional y modelo referencial:
 
-### 2.2. Patrón de Hidratación (Igual que el Carrito)
+1. Persistir relacion `user_id` + `product_id` (clave unica compuesta) sin duplicados.
+2. Exponer operaciones de agregar/quitar/listar wishlist del usuario autenticado.
+3. No persistir snapshot de nombre/precio/stock; hidratar contra Catalog al listar.
+4. Mantener productos no disponibles en wishlist, devolviendo flag de disponibilidad para UI.
+5. Requerir autenticacion para mutaciones y para lectura de wishlist propia.
 
-El `Wishlist Service` **no guardará el precio ni el nombre del producto**. Almacenará únicamente las claves foráneas (IDs).
-Cuando el usuario acceda a la vista "Mis Favoritos" en la App Mobile, el flujo será:
+## Alternativas consideradas
 
-1. El Gateway consulta al `Wishlist Service` y obtiene un array de IDs: `[prod_123, prod_456]`.
-2. El `Wishlist Service` hace una petición interna masiva (`GET /internal/products?ids=...`) al **Catalog Service** (MongoDB).
-3. El servicio ensambla la respuesta combinando los IDs con los datos reales y actualizados (precio, foto, stock) para devolvérselos al usuario.
+1. Guardar wishlist dentro de Profile Service.
+2. Guardar wishlist en Cart Service reutilizando Redis.
+3. Servicio dedicado Wishlist con persistencia propia.
 
-## 3. Estrategia de Resiliencia y Fallos
+## Consecuencias
 
-- Si el producto deja de existir o es deshabilitado por el vendedor, la hidratación desde el `Catalog Service` devolverá `null` para ese ID.
-- En ese escenario, el `Wishlist Service` mostrará el ítem en la interfaz del usuario con una etiqueta de **"Producto no disponible actualmente"**, pero **no lo borrará automáticamente** de la base de datos (quizás el vendedor reponga stock la semana siguiente y el usuario quiera comprarlo).
+- Positivas:
+	- Desacopla favoritos del carrito y evita mezclar datos efimeros con datos persistentes de interes.
+	- Facilita cumplir CAs de visualizacion (estado de wishlist en catalogo y lista de favoritos).
+	- Mantiene ownership claro de dominio sin contaminar Profile o Catalog.
+- Negativas o tradeoffs:
+	- Agrega un servicio y base de datos adicionales para una epica optativa.
+	- La hidratacion agrega dependencia sincronica con Catalog para render de lista.
+- Riesgos y mitigaciones:
+	- Riesgo: inconsistencia temporal de datos de producto al listar favoritos.
+		- Mitigacion: hidratar en lectura y priorizar Catalog como fuente de verdad.
+	- Riesgo: degradacion por llamadas masivas de hidratacion.
+		- Mitigacion: endpoint batch interno en Catalog + paginacion en wishlist.
 
-## 4. Consecuencias y Compromisos (Trade-offs)
+## Impacto en artefactos
 
-- **Positivas:** Mantenemos las cachés de Redis (Carrito) y las lecturas de Mongo (Catálogo) limpias y rápidas. El microservicio es tan pequeño que su consumo de CPU y memoria será mínimo.
-- **Negativas:** Obliga a mantener otra base de datos transaccional más. Al usar hidratación en tiempo real, si el `Catalog Service` se cae, los usuarios no podrán ver el detalle de sus favoritos (aunque esto es aceptable, ya que si el Catálogo está caído, toda la plataforma está inutilizable de todas formas).
+- OpenAPI afectado:
+	- `POST /wishlist/items`
+	- `DELETE /wishlist/items/{productId}`
+	- `GET /wishlist`
+	- Endpoint para estado de wishlist en vistas de catalogo (segun diseño final).
+- Diagramas afectados:
+	- Secuencia agregar/quitar favorito.
+	- Secuencia listar wishlist con hidratacion desde Catalog.
+- Servicios y datos impactados:
+	- Wishlist Service (tabla asociativa usuario-producto).
+	- Catalog Service (hidratacion y disponibilidad).
+	- Gateway/Auth (enforcement de autenticacion para acciones protegidas).

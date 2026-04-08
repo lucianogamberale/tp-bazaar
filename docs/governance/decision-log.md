@@ -23,3 +23,11 @@
 2. **D-004 (foto de perfil)**: recomendación provisional = almacenar binario fuera de PostgreSQL (Object Storage) y guardar solo `avatar_url`/`avatar_key` en Profile DB.
 3. **Costo**: priorizar alternativa gratis o de bajo costo (free tier). Para desarrollo local, usar storage S3-compatible self-hosted.
 4. **Cierre pendiente**: confirmar política de URL pública vs URL firmada según alcance de seguridad y complejidad del checkpoint.
+
+## Iteración 2 - Catálogo y Vendedor
+
+| ID    | Decisión                                              | Contexto                    | Opciones                                                | Impacto                            | Responsable    | Prioridad | Estado       | Fecha objetivo |
+| ----- | ----------------------------------------------------- | --------------------------- | ------------------------------------------------------- | ---------------------------------- | -------------- | --------- | ------------ | -------------- |
+| D-007 | Ownership escritura vs lectura en productos           | DD-013                      | A: Un solo servicio, B: Product escribe + Catalog lee   | Escalabilidad + claridad de dominio| Equipo Backend | Alta      | En análisis  | 2026-04-13     |
+| D-008 | Integración Product -> Catalog                        | DD-014                      | A: Sync HTTP, B: Async eventos                          | Consistencia + resiliencia         | Equipo Backend | Alta      | En análisis  | 2026-04-13     |
+| D-009 | Semántica de producto no disponible en detalle        | Catalog CA detalle          | A: 404, B: 410, C: 200 con estado de negocio            | UX + contratos                     | Equipo Backend | Media     | Abierta      | 2026-04-14     |

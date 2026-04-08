@@ -1,0 +1,162 @@
+openapi: 3.0.3
+info:
+  title: Catalog Service API
+  version: 0.1.0
+  description: Contrato inicial del servicio de lectura para Catalogo y descubrimiento de productos.
+servers:
+  - url: https://api.example.com
+paths:
+  /catalog/home:
+    get:
+      summary: Obtener contenido de home
+      tags: [Catalog]
+      responses:
+        '200':
+          description: Home construida con secciones disponibles
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HomeResponse'
+  /catalog/products:
+    get:
+      summary: Listar productos activos con paginacion
+      tags: [Catalog]
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+            minimum: 1
+        - in: query
+          name: pageSize
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - in: query
+          name: category
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Listado de productos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductListResponse'
+  /catalog/search:
+    get:
+      summary: Buscar productos por termino
+      tags: [Catalog]
+      parameters:
+        - in: query
+          name: q
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Resultados de busqueda o estado vacio
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductListResponse'
+  /catalog/products/{productId}:
+    get:
+      summary: Obtener detalle de producto
+      tags: [Catalog]
+      parameters:
+        - in: path
+          name: productId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Detalle de producto
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductDetailResponse'
+        '404':
+          description: Producto no disponible o inexistente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  schemas:
+    ProductCard:
+      type: object
+      properties:
+        productId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        price:
+          type: number
+        mainImageUrl:
+          type: string
+          format: uri
+        sellerName:
+          type: string
+    HomeResponse:
+      type: object
+      properties:
+        recent:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductCard'
+        recommendations:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductCard'
+    ProductListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductCard'
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        total:
+          type: integer
+    ProductDetailResponse:
+      type: object
+      properties:
+        productId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          type: number
+        stock:
+          type: integer
+        images:
+          type: array
+          items:
+            type: string
+            format: uri
+        seller:
+          type: object
+          properties:
+            sellerId:
+              type: string
+              format: uuid
+            sellerName:
+              type: string
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string

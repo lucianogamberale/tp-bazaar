@@ -1,0 +1,30 @@
+sequenceDiagram
+    autonumber
+    participant S as Vendedor
+    participant G as API Gateway
+    participant PI as Product&Inventory Service
+    participant PIDB as PostgreSQL Product
+    participant MQ as RabbitMQ
+    participant C as Catalog Service
+    participant CDB as MongoDB Catalog
+
+    S->>G: POST /seller/products {name,desc,price,stock,category,images}
+    G->>PI: Forward request autenticada
+    PI->>PI: Validar ownership y campos obligatorios
+
+    alt Datos válidos
+        PI->>PIDB: Crear producto
+        PIDB-->>PI: Producto persistido
+        PI->>MQ: Publish ProductPublished
+        PI-->>G: 201 Created + productId
+        G-->>S: 201 Created
+
+        MQ-->>C: ProductPublished
+        C->>CDB: Upsert vista de lectura
+        CDB-->>C: Vista actualizada
+    else Datos inválidos
+        PI-->>G: 400 Bad Request + errores
+        G-->>S: 400 Bad Request
+    end
+
+    Note over PI,C: La propagacion Product -> Catalog es eventual y desacoplada.

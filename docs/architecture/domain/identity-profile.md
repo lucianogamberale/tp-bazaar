@@ -41,6 +41,12 @@ Este documento describe la separación de responsabilidades entre IAM y Profile 
 2. Edición de perfil en Profile (`PATCH /profile/me`).
 3. Lectura de perfil propio en Profile (`GET /profile/me`).
 
+## Criterios provisionales acordados
+
+1. **Update de perfil**: se prioriza `PATCH` sobre `PUT` para soportar cambios parciales y evitar reemplazo completo accidental del recurso.
+2. **Foto de perfil**: no se almacena el binario en PostgreSQL; se usa Object Storage y en Profile DB solo se persisten metadatos (`avatar_url`, `avatar_key`, `updated_at`).
+3. **Implementación costo-cero/low-cost**: preferir proveedor con free tier; para local, usar alternativa compatible con S3.
+
 ## Riesgos y decisiones abiertas de Perfil
 
 1. Foto de perfil: definir URL pública o firmada y pipeline de validación.

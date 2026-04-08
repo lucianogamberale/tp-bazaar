@@ -111,6 +111,7 @@ Para cada duda de arquitectura, usar siempre esta secuencia:
 10. Contrato antes que codigo: alinear backend y clientes desde OpenAPI.
 11. Resiliencia by design: explicitar idempotencia, retries y compensaciones en flujos distribuidos.
 12. Seguridad por defecto: nunca mezclar datos de identidad sensible con perfil publico.
+13. Archivos multimedia fuera de DB transaccional: usar Object Storage (preferentemente free tier/low-cost) y persistir solo referencias en PostgreSQL.
 
 ## Como guiar al agente en cada iteracion
 

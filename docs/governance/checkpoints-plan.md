@@ -14,6 +14,7 @@
 - Presentar prototipos de flujos principales.
 - Tener primer set de endpoints OpenAPI del dominio inicial (Usuarios/Perfil).
 - Tener al menos 1 diagrama C4 y 1 diagrama de secuencia validados por equipo.
+- Definir y documentar estrategia de media (foto de perfil) con alternativa gratis/low-cost y opción local reproducible.
 
 ## Checkpoint 2
 

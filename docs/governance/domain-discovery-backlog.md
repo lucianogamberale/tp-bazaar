@@ -34,7 +34,7 @@ Este backlog desagrega el descubrimiento por épicas en tareas pequeñas y revis
 
 | ID     | Tarea                                               | Estado | Evidencia esperada                |
 | ------ | --------------------------------------------------- | ------ | --------------------------------- |
-| DD-011 | Extraer CA obligatorios de Catalogo                 | todo   | Trazabilidad actualizada          |
+| DD-011 | Extraer CA obligatorios de Catalogo                 | done   | Trazabilidad actualizada          |
 | DD-012 | Extraer CA obligatorios de Vendedor                 | todo   | Trazabilidad actualizada          |
 | DD-013 | Definir capacidades de lectura vs escritura         | todo   | Documento de dominio actualizado  |
 | DD-014 | Identificar eventos minimos entre Product y Catalog | todo   | Decision-log y diagrama secuencia |

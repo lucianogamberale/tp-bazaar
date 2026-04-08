@@ -40,3 +40,4 @@
 | D-011 | Momento de descuento de stock               | Checkout CA1/CA2/CA4 | A: antes de pago, B: al confirmar pago                   | Riesgo de sobreventa y compensación | Equipo Backend | Alta      | En análisis | 2026-04-15     |
 | D-012 | Estrategia de idempotencia en checkout/pago | Checkout CA5         | A: key por intento, B: sin key explícita                 | Riesgo de doble cobro               | Equipo Backend | Alta      | En análisis | 2026-04-15     |
 | D-013 | Política de concurrencia para último item   | Checkout CA4         | A: lock pesimista, B: validación optimista + retry       | Equidad + performance               | Equipo Backend | Media     | Abierta     | 2026-04-16     |
+| D-014 | Máquina de estados de orden                  | DD-018               | A: transiciones explícitas validadas, B: cambios libres de estado | Integridad de proceso de compra  | Equipo Backend | Alta      | En análisis | 2026-04-16     |

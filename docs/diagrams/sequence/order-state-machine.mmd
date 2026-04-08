@@ -1,0 +1,19 @@
+stateDiagram-v2
+    [*] --> pendiente_de_pago
+
+    pendiente_de_pago --> confirmada: pago_aprobado
+    pendiente_de_pago --> pago_rechazado: pago_rechazado
+
+    confirmada --> en_preparacion: vendedor_avanza_estado
+    en_preparacion --> enviada: vendedor_avanza_estado (+tracking opcional)
+    enviada --> entregada: comprador_confirma_entrega
+
+    %% Estados de excepcion modelados para soporte funcional futuro
+    confirmada --> cancelada: cancelacion (optativa)
+    en_preparacion --> cancelada: cancelacion (optativa)
+    cancelada --> reembolso_en_proceso: iniciar_reembolso (optativa)
+    reembolso_en_proceso --> reembolso_procesado: reembolso_finalizado (optativa)
+
+    entregada --> [*]
+    pago_rechazado --> [*]
+    reembolso_procesado --> [*]

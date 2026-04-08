@@ -33,3 +33,9 @@ Construir una plataforma de e-commerce basada en microservicios, con foco en:
 - Diagramas C4 (Contexto, Contenedores, Componentes).
 - Diagramas de secuencia de flujos críticos.
 - Plan iterativo por checkpoints.
+
+## Flujo recomendado de descubrimiento de dominio
+
+1. Seguir el plan en `docs/governance/agent-work-plan.md`.
+2. Ejecutar tareas pequeñas desde `docs/governance/domain-discovery-backlog.md`.
+3. Registrar resultados en `docs/governance/traceability-matrix.md` y `docs/governance/decision-log.md`.

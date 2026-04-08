@@ -9,6 +9,13 @@ Documentación técnica viva del proyecto.
 - `api/contracts/`: contratos OpenAPI por servicio.
 - `governance/`: trazabilidad, plan por checkpoints y decisiones abiertas.
 
+## Ruta recomendada para iterar
+
+1. Plan operativo de agentes: `docs/governance/agent-work-plan.md`.
+2. Backlog desagregado de descubrimiento: `docs/governance/domain-discovery-backlog.md`.
+3. Matriz de trazabilidad: `docs/governance/traceability-matrix.md`.
+4. Decisiones abiertas y cierres: `docs/governance/decision-log.md`.
+
 ## Convención de actualización
 
 1. Cada cambio relevante de arquitectura debe impactar en:

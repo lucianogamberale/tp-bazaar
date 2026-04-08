@@ -44,6 +44,47 @@ Salida:
 
 - Paquete de entrega revisable por equipo y profesor.
 
+## Plan desagregado en micro-tareas
+
+### Iteración tipo (60-90 min)
+
+1. Seleccionar una única épica objetivo.
+2. Leer solo esa sección del enunciado y listar historias/CA textuales.
+3. Convertir cada CA en una capacidad técnica verificable.
+4. Proponer owner provisional (servicio) por capacidad.
+5. Marcar incertidumbres y supuestos por cada capacidad.
+6. Definir artefactos mínimos a actualizar (trazabilidad, decisiones, dominio, contrato o diagrama).
+7. Cerrar la iteración con semáforo:
+   - Verde: lista para diseño detallado.
+   - Amarillo: faltan decisiones.
+   - Rojo: faltan datos esenciales.
+
+### Checklist de sesión
+
+1. ¿Separamos claramente hechos del enunciado de hipótesis del equipo?
+2. ¿Cada CA quedó mapeado a una capacidad?
+3. ¿Cada capacidad tiene owner provisional?
+4. ¿Quedaron decisiones abiertas registradas con fecha y responsable?
+5. ¿Se actualizó la matriz de trazabilidad?
+
+## Secuencia sugerida para descubrir dominio
+
+1. Usuarios + Perfil (base de identidad).
+2. Catálogo + Vendedor (fuente de productos).
+3. Carrito + Checkout y Ordenes (flujo transaccional).
+4. Reviews + Recomendaciones (calidad de contenido y personalizacion).
+5. Administración + Métricas + Notificaciones (capacidades transversales).
+
+## Buenas practicas de mercado para trabajo con agentes
+
+1. Timebox estricto por iteración: evitar sesiones largas sin cierre documental.
+2. Una decisión por vez: no mezclar varios dominios en una misma discusión.
+3. Evidencia primero: citar CA o requisito no funcional antes de proponer arquitectura.
+4. Documentación viva: cada hipótesis debe poder confirmarse o descartarse en la siguiente iteración.
+5. Contratos tempranos: escribir OpenAPI preliminar antes de implementar para detectar lagunas.
+6. Arquitectura trazable: toda decisión importante debe terminar en ADR con alternativas.
+7. Criterio de salida explícito: no avanzar de fase sin definir qué se considera "done".
+
 ## Buenas practicas para prompts
 
 1. Pedir siempre formato de salida estructurado.
